@@ -7,6 +7,8 @@ module prn_generator #(
     output wire chip_out
 );
 
+    // Bit k of each register holds LFSR stage k+1 (GPS ICD numbering):
+    // new bits enter stage 1 (bit 0) and the G1 output is stage 10 (bit 9).
     reg [9:0] g1 = 10'b1111111111;
     reg [9:0] g2 = 10'b1111111111;
 
@@ -21,8 +23,8 @@ module prn_generator #(
             g1 <= 10'b1111111111;
             g2 <= 10'b1111111111;
         end else begin
-            g1 <= {g1_feedback, g1[9:1]};
-            g2 <= {g2_feedback, g2[9:1]};
+            g1 <= {g1[8:0], g1_feedback};
+            g2 <= {g2[8:0], g2_feedback};
         end
     end
 

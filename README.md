@@ -38,7 +38,7 @@ A GPS receiver must find the code phase of each satellite's PRN before it can tr
 
 | Module | Function |
 |---|---|
-| `prn_generator.v` | 10-bit G1 (x³+x¹⁰) and G2 (x²+x³+x⁶+x⁸+x⁹+x¹⁰) LFSRs. The chip is G1[10] ⊕ (G2 tap A ⊕ G2 tap B), with taps parameterised per PRN (2/6 = PRN 1). |
+| `prn_generator.v` | 10-bit G1 (x³+x¹⁰) and G2 (x²+x³+x⁶+x⁸+x⁹+x¹⁰) LFSRs. The chip is G1[10] ⊕ (G2 tap A ⊕ G2 tap B), with taps parameterised per PRN (2/6 = PRN 1). Verified against the GPS ICD; see *Verification*. |
 | `delay_line.v` / `variable_delay_line.v` | Delays the replica by a known number of chips (800) to create a test "incoming" signal |
 | `correlator.v` / `correlator_slice.v` | Counts chip agreements (XNOR) over a 1023-chip period and steps through its assigned offset range. Lock threshold: 950/1023. |
 | `correlator_top.v` | Generates 32 slices, enables the first N, partitions the search range, and priority-selects the locked offset |
@@ -66,6 +66,22 @@ A GPS receiver must find the code phase of each satellite's PRN before it can tr
 
 All 32 slices are always present in hardware, and N only enables or disables them. The figures above are therefore the cost of the full runtime-configurable engine. In bring-up the design was characterised at N = 1, 4, 16 and 32. The on-board debug work fixed an index off-by-one in the slice range partitioning, the settling of the runtime range divider, and switch/button bounce.
 
+## Verification (Vivado xsim)
+
+| Testbench | What it checks | Result |
+|---|---|---|
+| `sim/tb_prn_generator.v` | PRN 1–8: the first 10 chips match the GPS ICD table (1440, 1620, 1710, 1744, 1133, 1455, 1131, 1454 octal), 512 ones per 1023-chip period, and the sequence repeats with period 1023 | **PASS**, all 8 PRNs |
+| `sim/tb_acquisition_slice.v` | `prn_generator` → `delay_line(800)` → `correlator_slice` with the N = 32 partitioning: slice 25 must lock at offset 800; slice 0 must never lock | **PASS**: locks at offset 800 after 25 periods; no false lock |
+
+Run either testbench from a shell with Vivado on the path:
+```bash
+xvlog rtl/*.v sim/tb_prn_generator.v
+xelab tb_prn_generator -s prn_sim --timescale 1ns/1ps
+xsim prn_sim -R
+```
+
+**C/A code fix (Nov 2026).** The original `prn_generator.v` shifted its registers as `{feedback, g[9:1]}`, which runs opposite to its tap indexing. That made G1 repeat every 63 chips, so the output was not a true C/A code. `tb_prn_generator` fails on the original RTL with 4,175 errors. Acquisition on the board still locked correctly, because the test signal is a delayed copy of the same sequence. The fix shifts toward the higher index (`{g[8:0], feedback}`, so bit *k* is stage *k + 1*), and the generator now reproduces the ICD sequences exactly. The fix is verified in simulation; the bitstream has not yet been rebuilt and re-run on the board.
+
 ## Setup and usage
 1. In Vivado, create an RTL project for `xc7a35tcpg236-1` and add `rtl/*.v` and `constraints/basys3.xdc`. Set `correlator_top` as top.
 2. Generate the bitstream and program the Basys 3.
@@ -81,7 +97,8 @@ All 32 slices are always present in hardware, and N only enables or disables the
 - Live L1 samples from a MAX2769 RF front end (scoped), with carrier wipe-off and Doppler bins.
 - Add noise and Doppler to the test signal and measure detection probability against C/N₀.
 - FFT-based parallel code-phase search as a comparison architecture.
-- A self-checking testbench that sweeps all 32 values of N and all PRNs.
+- Rebuild the bitstream with the corrected C/A generator and re-run the on-board N sweep.
+- Extend `tb_acquisition_slice` to sweep all 32 values of N through `correlator_top`.
 
 ## Technologies
 `Verilog` `Vivado` `Artix-7` `Basys 3` `GPS / GNSS` `LFSR` `Gold codes` `Parallel correlators` `Timing closure` `MATLAB`
