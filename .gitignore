@@ -1,0 +1,21 @@
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+# Vivado
+*.cache/
+*.hw/
+*.runs/
+*.sim/
+*.gen/
+*.ip_user_files/
+.Xil/
+*.jou
+*.log
+*.str
+*.wdb
+*.saif
+*.dcp
+vivado_pid*
+*.asv
